@@ -1,12 +1,12 @@
-# 🏆 Copa Primavera App v2.0
+# Copa Primavera App v2.0
 
-> **Aplicación integral para la gestión y visualización en tiempo real de torneos de Pádel.**
+> Aplicación integral para la gestión y visualización en tiempo real de torneos de Pádel.
 
-🔗 **[Ver Despliegue en Vivo](https://copa-primavera-v2.vercel.app/)**
+**[Ver Despliegue en Vivo](https://copa-primavera-v2.vercel.app/)**
 
 ---
 
-## 📖 Descripción del Proyecto
+## Descripción del Proyecto
 
 **Copa Primavera v2.0** es una plataforma web "Full-Stack" diseñada para digitalizar por completo la experiencia de un torneo de Pádel. Soluciona tanto la cara pública (espectadores y jugadores) como la administración interna del torneo. 
 
@@ -16,7 +16,7 @@ Todo esto está envuelto en una estética premium estilo *Cyber-Neon / Glassmorp
 
 ---
 
-## ⚡ Tecnologías y Stack
+## Tecnologías y Stack
 
 El proyecto fue construido utilizando tecnologías de vanguardia para asegurar rendimiento, escalabilidad y una gran experiencia de desarrollo.
 
@@ -29,14 +29,14 @@ El proyecto fue construido utilizando tecnologías de vanguardia para asegurar r
 
 ---
 
-## 🚀 Funcionalidades Principales
+## Funcionalidades Principales
 
-### 👁️ Vista Pública (Para Jugadores y Espectadores)
+### Vista Pública (Para Jugadores y Espectadores)
 *   **Cuadros y Llaves en Vivo:** Visualización interactiva de los cuadros del torneo (desde 16avos hasta la final). Los ganadores avanzan de llave en la interfaz de forma dinámica.
 *   **Directorio de Jugadores:** Catálogo de todos los inscritos organizados por categorías. Incluye un buscador/filtro lateral interactivo (o un *Bottom Tab* en móviles).
 *   **Diseño Dinámico:** Tarjetas translúcidas (*glassmorphism*), un fondo estático persistente, botones estilizados y navegación adaptada a gestos en móvil.
 
-### 🛡️ Panel de Administración (Seguro)
+### Panel de Administración (Seguro)
 *   **Autenticación Protegida:** Acceso exclusivo vía email y contraseña.
 *   **Control de Inscripciones y Pagos:** Panel detallado para registrar parejas, asignarles categorías y llevar un control visual (con *toggles*) de quién abonó y quién está pendiente.
 *   **Generador Automático de Cuadros:** Algoritmo incorporado que toma una lista de jugadores inscriptos y genera automáticamente un fixture de llaves. Calcula espacios vacíos y asigna **"BYEs"** (Pase directo) cuando el número de parejas no es potencia de 2.
@@ -45,7 +45,7 @@ El proyecto fue construido utilizando tecnologías de vanguardia para asegurar r
 
 ---
 
-## 🗄️ Arquitectura de la Base de Datos
+## Arquitectura de la Base de Datos
 
 La base de datos relacional (PostgreSQL en Supabase) está dividida en 4 tablas principales:
 
@@ -58,7 +58,7 @@ La base de datos relacional (PostgreSQL en Supabase) está dividida en 4 tablas 
 
 ---
 
-## 🛠️ Instalación y Desarrollo Local
+## Instalación y Desarrollo Local
 
 Si deseas correr este proyecto de forma local en tu máquina:
 
@@ -88,11 +88,11 @@ Si deseas correr este proyecto de forma local en tu máquina:
 
 ---
 
-## 👨‍💻 Autor
+## Autor
 
-Diseñado y desarrollado con ♥ por **Thiago Lopez**.
-*   📸 **Instagram:** [@heythia_](https://www.instagram.com/heythia_/)
-*   💼 **LinkedIn:** [Thiago Lopez](https://www.linkedin.com/in/thiago-lopez-284507219)
+Diseñado y desarrollado por **Thiago Lopez**.
+*   **Instagram:** [@heythia_](https://www.instagram.com/heythia_/)
+*   **LinkedIn:** [Thiago Lopez](https://www.linkedin.com/in/thiago-lopez-284507219)
 
 ---
 *Copa Primavera App v2.0 - 2026*
