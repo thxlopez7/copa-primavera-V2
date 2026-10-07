@@ -30,9 +30,28 @@ export function generateTournamentMatches(categoryId, numPairs, pairsList, isRan
   let pairs = [...pairsList];
 
   if (isRandom) {
-    for (let i = pairs.length - 1; i > 0; i--) {
+    let realPairs = pairs.filter(p => p !== 'BYE');
+    let byes = pairs.filter(p => p === 'BYE');
+
+    for (let i = realPairs.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+      [realPairs[i], realPairs[j]] = [realPairs[j], realPairs[i]];
+    }
+
+    pairs = [];
+    let byeCount = byes.length;
+    let expectedLength = pairsList.length;
+
+    for (let i = 0; i < expectedLength; i++) {
+      if (i % 2 === 1 && byeCount > 0) {
+        pairs.push('BYE');
+        byeCount--;
+      } else if (realPairs.length > 0) {
+        pairs.push(realPairs.shift());
+      } else if (byeCount > 0) {
+        pairs.push('BYE');
+        byeCount--;
+      }
     }
   }
 
@@ -143,7 +162,7 @@ export function advanceWinner(matchesList, updatedMatch) {
 
     // Buscar si hay partidos en el bracket que estén esperando a este ganador o perdedor
     matchesList.forEach(m => {
-      if (m.match_type === 'BRACKET') {
+      if (m.match_type === 'BRACKET' && m.category_id === updatedMatch.category_id) {
         let matchUpdates = {};
         let needsUpdate = false;
 

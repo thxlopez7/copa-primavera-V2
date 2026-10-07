@@ -57,7 +57,7 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
     const courtName = courts.find(c => c.id === match.court_id)?.name || 'Sin Asignar';
     const dateStr = match.match_date ? `${match.match_date.split('-').reverse().join('/')} ${match.match_time || ''}` : 'Fecha a definir';
 
-    const isEditable = mode === 'admin' && match.p1_name && match.p2_name && !isByeMatch;
+    const isEditable = mode === 'admin' && !isByeMatch;
 
     return (
       <div 
