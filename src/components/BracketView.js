@@ -5,6 +5,7 @@ import { updateMatch } from "../lib/supabaseService";
 
 export default function BracketView({ category, allMatches, courts, mode, onBack, onMatchUpdate }) {
   const [editingMatch, setEditingMatch] = useState(null);
+  const [showSwapModal, setShowSwapModal] = useState(false);
 
   // Filtrar partidos de esta categoría
   const matches = allMatches.filter(m => m.category_id === category.id);
@@ -141,7 +142,14 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
           Volver
         </button>
-        <span className="text-cyan-400 font-bold uppercase tracking-widest text-sm">{category.name}</span>
+        <div className="flex items-center gap-3">
+          {mode === 'admin' && zones.length > 0 && (
+            <button onClick={() => setShowSwapModal(true)} className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-1.5 px-3 rounded text-[10px] uppercase tracking-widest transition-colors shadow-lg">
+              Intercambiar Parejas
+            </button>
+          )}
+          <span className="text-cyan-400 font-bold uppercase tracking-widest text-sm">{category.name}</span>
+        </div>
       </div>
       
       <div className="bg-gray-900/60 border border-gray-800 rounded-xl flex-grow relative shadow-2xl overflow-x-auto custom-scrollbar" style={{ minHeight: 'calc(100vh - 180px)' }}>
@@ -180,6 +188,33 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
               alert("Error al guardar el partido en la base de datos.");
             }
           }} 
+        />
+      )}
+
+      {/* SWAP PAIRS MODAL */}
+      {showSwapModal && (
+        <SwapPairsModal 
+          zones={zones}
+          onClose={() => setShowSwapModal(false)}
+          onSwap={async (p1Info, p2Info) => {
+            if (p1Info.matchId === p2Info.matchId) {
+              const updates = {};
+              updates[p1Info.slot] = p2Info.name;
+              updates[p2Info.slot] = p1Info.name;
+              const u = await updateMatch(p1Info.matchId, updates);
+              if (u) onMatchUpdate(u);
+            } else {
+              const updates1 = {}; updates1[p1Info.slot] = p2Info.name;
+              const updates2 = {}; updates2[p2Info.slot] = p1Info.name;
+              const [u1, u2] = await Promise.all([
+                updateMatch(p1Info.matchId, updates1),
+                updateMatch(p2Info.matchId, updates2)
+              ]);
+              if (u1) onMatchUpdate(u1);
+              setTimeout(() => { if (u2) onMatchUpdate(u2); }, 100);
+            }
+            setShowSwapModal(false);
+          }}
         />
       )}
     </div>
@@ -296,6 +331,73 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
 
           <button type="submit" disabled={loading} className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold py-3 rounded-lg mt-2 uppercase tracking-widest text-sm transition-colors shadow-[0_0_15px_rgba(0,242,254,0.1)] hover:shadow-[0_0_20px_rgba(0,242,254,0.4)] flex justify-center items-center gap-2">
             {loading ? <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : "Guardar Partido"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SwapPairsModal({ zones, onClose, onSwap }) {
+  const allPairs = [];
+  zones.forEach(z => {
+    // Solo permitimos intercambiar parejas en partidos que aún no tienen ganador
+    const hasWinner = z.winner && z.winner !== 'null';
+    if (!hasWinner) {
+      if (z.p1_name && z.p1_name !== 'BYE') allPairs.push({ name: z.p1_name, matchId: z.id, slot: 'p1_name', zone: z.round_name });
+      if (z.p2_name && z.p2_name !== 'BYE') allPairs.push({ name: z.p2_name, matchId: z.id, slot: 'p2_name', zone: z.round_name });
+    }
+  });
+
+  const [pair1, setPair1] = useState('');
+  const [pair2, setPair2] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!pair1 || !pair2 || pair1 === pair2) return;
+    setLoading(true);
+    const p1Info = allPairs.find(p => p.name === pair1);
+    const p2Info = allPairs.find(p => p.name === pair2);
+    await onSwap(p1Info, p2Info);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-up">
+        <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-950">
+          <h3 className="text-lg font-bold text-cyan-400 uppercase tracking-wider">Intercambiar Parejas</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
+             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <p className="text-xs text-gray-400 text-center mb-4">Selecciona dos parejas para intercambiar sus lugares en las zonas. Solo se muestran parejas de partidos sin jugar.</p>
+          
+          <div>
+            <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Pareja A</label>
+            <select value={pair1} onChange={e => setPair1(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 outline-none">
+              <option value="">Seleccionar pareja...</option>
+              {allPairs.map(p => <option key={`p1-${p.name}`} value={p.name}>{p.name} ({p.zone})</option>)}
+            </select>
+          </div>
+          
+          <div className="flex justify-center text-gray-500">
+             <svg className="w-6 h-6 rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
+          </div>
+          
+          <div>
+            <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Pareja B</label>
+            <select value={pair2} onChange={e => setPair2(e.target.value)} className="w-full bg-gray-950 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 outline-none">
+              <option value="">Seleccionar pareja...</option>
+              {allPairs.map(p => <option key={`p2-${p.name}`} value={p.name}>{p.name} ({p.zone})</option>)}
+            </select>
+          </div>
+
+          <button type="submit" disabled={loading || !pair1 || !pair2 || pair1 === pair2} className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold py-3 rounded-lg mt-6 uppercase tracking-widest text-sm transition-colors shadow-[0_0_15px_rgba(0,242,254,0.1)] flex justify-center items-center gap-2">
+            {loading ? <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : "Confirmar Intercambio"}
           </button>
         </form>
       </div>
