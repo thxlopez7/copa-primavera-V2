@@ -249,10 +249,17 @@ export default function TournamentApp({ initialCategories }) {
           if (advancedMatch) {
              currentMatches = currentMatches.map(m => m.id === advancedMatch.id ? advancedMatch : m);
              
-             // Si el partido avanzado ganó automáticamente (porque el rival era BYE), lo encolamos para que siga propagando
-             if (prop.updates.winner) {
+             // Si el partido cambió de ganador (establecido o revertido) o cambiaron sus participantes,
+             // lo encolamos para que siga propagando o revirtiendo en cadena
+             if (
+               prop.updates.hasOwnProperty('winner') ||
+               prop.updates.hasOwnProperty('p1_name') ||
+               prop.updates.hasOwnProperty('p2_name')
+             ) {
                queue.push(advancedMatch);
              }
+          } else {
+             console.error(`Error al persistir propagación en la base de datos para el partido: ${prop.matchId}`);
           }
         }
         setMatches([...currentMatches]);

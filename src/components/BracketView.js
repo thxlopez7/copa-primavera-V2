@@ -58,13 +58,13 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
     const courtName = courts.find(c => c.id === match.court_id)?.name || 'Sin Asignar';
     const dateStr = match.match_date ? `${match.match_date.split('-').reverse().join('/')} ${match.match_time || ''}` : 'Fecha a definir';
 
-    const isEditable = mode === 'admin' && !isByeMatch;
+    const isEditable = mode === 'admin';
 
     return (
       <div 
         className={`bg-gray-950 border ${hasWinner ? 'border-gray-700' : 'border-gray-800'} rounded-lg my-4 relative z-10 overflow-hidden ${
           isEditable ? 'cursor-pointer hover:border-cyan-500 hover:shadow-[0_0_15px_rgba(0,242,254,0.3)] transition-all transform hover:-translate-y-1 duration-300 group' : ''
-        } ${isByeMatch ? 'opacity-50 grayscale hover:opacity-75 transition-opacity' : ''}`}
+        } ${isByeMatch ? 'opacity-75 hover:opacity-100 transition-opacity' : ''}`}
         onClick={() => isEditable && setEditingMatch(match)}
       >
         {/* Glow de fondo si tiene ganador */}
@@ -76,6 +76,7 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
           <span className="flex items-center gap-1.5">
             {hasWinner && <svg className="w-3 h-3 text-cyan-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>}
             {match.round_name}
+            {isByeMatch && <span className="text-[9px] bg-cyan-950/80 text-cyan-300 border border-cyan-700/50 px-1.5 py-0.5 rounded font-bold lowercase tracking-normal">bye</span>}
           </span>
           {isEditable && <span className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-cyan-200">Editar</span>}
         </div>
@@ -182,7 +183,7 @@ export default function BracketView({ category, allMatches, courts, mode, onBack
           onSave={async (updates) => {
             const updatedMatch = await updateMatch(editingMatch.id, updates);
             if (updatedMatch) {
-              onMatchUpdate(updatedMatch);
+              await onMatchUpdate(updatedMatch);
               setEditingMatch(null);
             } else {
               alert("Error al guardar el partido en la base de datos.");
@@ -235,19 +236,70 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
   const [p1Name, setP1Name] = useState(match.p1_name || '');
   const [p2Name, setP2Name] = useState(match.p2_name || '');
 
+  const isByeMatch = match.is_bye || p1Name === 'BYE' || p2Name === 'BYE';
+
+  // Opciones válidas para ganador (excluye BYE y placeholders)
+  const winnerCandidates = [];
+  if (p1Name && p1Name !== 'BYE') winnerCandidates.push(p1Name);
+  if (p2Name && p2Name !== 'BYE') winnerCandidates.push(p2Name);
+
+  let currentWinnerSelect = 'null';
+  if (winner && winner !== 'null') {
+    if (winnerCandidates.includes(winner)) {
+      currentWinnerSelect = winner;
+    } else if (isByeMatch && winnerCandidates.length === 1) {
+      currentWinnerSelect = winnerCandidates[0];
+    }
+  }
+
+  const handleP1NameChange = (val) => {
+    setP1Name(val);
+    if (isByeMatch && p2Name === 'BYE' && winner !== 'null' && winner) {
+      setWinner(val);
+    } else if (winner === p1Name) {
+      setWinner(val);
+    }
+  };
+
+  const handleP2NameChange = (val) => {
+    setP2Name(val);
+    if (isByeMatch && p1Name === 'BYE' && winner !== 'null' && winner) {
+      setWinner(val);
+    } else if (winner === p2Name) {
+      setWinner(val);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    const isBye = match.is_bye || p1Name === 'BYE' || p2Name === 'BYE';
+    let chosenWinner = winner === 'null' ? null : winner;
+
+    if (isBye) {
+      if (p2Name === 'BYE') {
+        chosenWinner = (chosenWinner && p1Name && p1Name !== 'BYE') ? p1Name : null;
+      } else if (p1Name === 'BYE') {
+        chosenWinner = (chosenWinner && p2Name && p2Name !== 'BYE') ? p2Name : null;
+      }
+    } else {
+      if (chosenWinner && chosenWinner !== p1Name && chosenWinner !== p2Name) {
+        chosenWinner = null;
+      }
+    }
+
     await onSave({
       match_date: date || null,
       match_time: time || null,
       court_id: courtId || null,
-      is_wo: isWo,
-      winner: winner === 'null' ? null : winner,
-      p1_score: p1Score,
-      p2_score: p2Score,
+      is_wo: isBye ? (chosenWinner ? true : false) : isWo,
+      winner: chosenWinner,
+      p1_score: isBye ? ['', '', ''] : p1Score,
+      p2_score: isBye ? ['', '', ''] : p2Score,
       p1_name: p1Name || null,
-      p2_name: p2Name || null
+      p2_name: p2Name || null,
+      is_bye: isBye
     });
     setLoading(false);
   };
@@ -268,7 +320,14 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-up">
         <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-gray-950">
-          <h3 className="text-lg font-bold text-cyan-400 uppercase tracking-wider">{match.round_name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-bold text-cyan-400 uppercase tracking-wider">{match.round_name}</h3>
+            {isByeMatch && (
+              <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-700/60 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
+                Pase BYE
+              </span>
+            )}
+          </div>
           <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
           </button>
@@ -293,38 +352,66 @@ function MatchEditorModal({ match, courts, onClose, onSave }) {
             </div>
           </div>
 
-          <div className="bg-gray-950 border border-gray-800 rounded-lg p-4">
-            <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 mb-2 text-[10px] text-gray-500 uppercase tracking-widest text-center">
-              <div className="text-left">Pareja</div><div>S1</div><div>S2</div><div>S3</div>
+          {isByeMatch ? (
+            <div className="bg-gray-950 border border-gray-800 rounded-lg p-4 space-y-3">
+              <div className="bg-cyan-950/40 border border-cyan-800/40 rounded-lg p-3 text-xs text-cyan-300 flex items-center gap-2.5">
+                <svg className="w-5 h-5 text-cyan-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>Partido con <strong>Pase Directo (BYE)</strong>. Puedes corregir los nombres o el pase aquí. Al guardar, se propagará a la siguiente ronda.</span>
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Pareja 1</label>
+                <input type="text" value={p1Name} onChange={e => handleP1NameChange(e.target.value)} placeholder="Pareja 1" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-cyan-500 outline-none" />
+              </div>
+              <div>
+                <label className="block text-[10px] text-gray-500 uppercase tracking-widest mb-1">Pareja 2</label>
+                <input type="text" value={p2Name} onChange={e => handleP2NameChange(e.target.value)} placeholder="Pareja 2" className="w-full bg-gray-900 border border-gray-700 rounded p-2 text-xs text-white focus:border-cyan-500 outline-none" />
+              </div>
             </div>
-            
-            <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 items-center mb-3">
-              <input type="text" value={p1Name} onChange={e => setP1Name(e.target.value)} placeholder="Pareja 1" className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-cyan-500 outline-none" />
-              <input type="number" min="0" value={p1Score[0]} onChange={e => updateScore(1, 0, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
-              <input type="number" min="0" value={p1Score[1]} onChange={e => updateScore(1, 1, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
-              <input type="number" min="0" value={p1Score[2]} onChange={e => updateScore(1, 2, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+          ) : (
+            <div className="bg-gray-950 border border-gray-800 rounded-lg p-4">
+              <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 mb-2 text-[10px] text-gray-500 uppercase tracking-widest text-center">
+                <div className="text-left">Pareja</div><div>S1</div><div>S2</div><div>S3</div>
+              </div>
+              
+              <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 items-center mb-3">
+                <input type="text" value={p1Name} onChange={e => handleP1NameChange(e.target.value)} placeholder="Pareja 1" className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-cyan-500 outline-none" />
+                <input type="number" min="0" value={p1Score[0]} onChange={e => updateScore(1, 0, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+                <input type="number" min="0" value={p1Score[1]} onChange={e => updateScore(1, 1, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+                <input type="number" min="0" value={p1Score[2]} onChange={e => updateScore(1, 2, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+              </div>
+              
+              <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 items-center">
+                <input type="text" value={p2Name} onChange={e => handleP2NameChange(e.target.value)} placeholder="Pareja 2" className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-cyan-500 outline-none" />
+                <input type="number" min="0" value={p2Score[0]} onChange={e => updateScore(2, 0, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+                <input type="number" min="0" value={p2Score[1]} onChange={e => updateScore(2, 1, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+                <input type="number" min="0" value={p2Score[2]} onChange={e => updateScore(2, 2, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
+              </div>
             </div>
-            
-            <div className="grid grid-cols-[1fr_40px_40px_40px] gap-2 items-center">
-              <input type="text" value={p2Name} onChange={e => setP2Name(e.target.value)} placeholder="Pareja 2" className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-xs text-white focus:border-cyan-500 outline-none" />
-              <input type="number" min="0" value={p2Score[0]} onChange={e => updateScore(2, 0, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
-              <input type="number" min="0" value={p2Score[1]} onChange={e => updateScore(2, 1, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
-              <input type="number" min="0" value={p2Score[2]} onChange={e => updateScore(2, 2, e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded p-1.5 text-center text-sm text-white focus:border-cyan-500" />
-            </div>
-          </div>
+          )}
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-950 border border-gray-800 rounded-lg p-4 gap-4 mt-5">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={isWo} onChange={e => setIsWo(e.target.checked)} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-cyan-500 focus:ring-cyan-500" />
-              <span className="text-sm text-gray-300 font-medium">Ganador por W.O.</span>
-            </label>
+            {!isByeMatch ? (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={isWo} onChange={e => setIsWo(e.target.checked)} className="w-4 h-4 rounded border-gray-700 bg-gray-900 text-cyan-500 focus:ring-cyan-500" />
+                <span className="text-sm text-gray-300 font-medium">Ganador por W.O.</span>
+              </label>
+            ) : (
+              <div className="text-xs text-gray-400 font-medium">
+                Pase a siguiente ronda:
+              </div>
+            )}
             
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <label className="text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">Ganador:</label>
-              <select value={winner} onChange={e => setWinner(e.target.value)} className="bg-gray-900 border border-gray-700 rounded p-2 text-xs text-cyan-400 font-bold focus:border-cyan-500 outline-none w-full sm:max-w-[150px] truncate">
+              <select 
+                value={currentWinnerSelect} 
+                onChange={e => setWinner(e.target.value)} 
+                className="bg-gray-900 border border-gray-700 rounded p-2 text-xs text-cyan-400 font-bold focus:border-cyan-500 outline-none w-full sm:max-w-[170px] truncate"
+              >
                 <option value="null">Sin definir</option>
-                <option value={p1Name || match.p1_name}>{p1Name || match.p1_name}</option>
-                <option value={p2Name || match.p2_name}>{p2Name || match.p2_name}</option>
+                {winnerCandidates.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
           </div>

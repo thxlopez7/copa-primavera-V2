@@ -149,40 +149,165 @@ export function advanceWinner(matchesList, updatedMatch) {
 
   // SI SE ACTUALIZÓ UNA ZONA
   if (updatedMatch.match_type === 'ZONE') {
-    // Para una zona (ej. "ZONA A"), extraemos la letra "A"
     const zoneLetter = updatedMatch.round_name.replace('ZONA ', '').trim();
     const winnerLabel = `Zona ${zoneLetter} 1º`;
     const loserLabel = `Zona ${zoneLetter} 2º`;
 
-    const winnerName = updatedMatch.winner;
-    const loserName = updatedMatch.winner === updatedMatch.p1_name ? updatedMatch.p2_name : 
-                      updatedMatch.winner === updatedMatch.p2_name ? updatedMatch.p1_name : null;
+    const p1 = updatedMatch.p1_name;
+    const p2 = updatedMatch.p2_name;
+    const rawWinner = updatedMatch.winner;
+    const winner = (rawWinner && rawWinner !== 'null' && rawWinner !== 'Sin definir') ? rawWinner : null;
+    let loser = null;
+    if (winner) {
+      loser = (winner === p1) ? p2 : (winner === p2 ? p1 : null);
+    }
 
-    if (!winnerName || !loserName) return [];
+    const targetWinnerName = winner || winnerLabel;
+    const targetLoserName = loser || loserLabel;
 
-    // Buscar si hay partidos en el bracket que estén esperando a este ganador o perdedor
-    matchesList.forEach(m => {
-      if (m.match_type === 'BRACKET' && m.category_id === updatedMatch.category_id) {
-        let matchUpdates = {};
-        let needsUpdate = false;
+    const round1Matches = matchesList.filter(
+      m => m.category_id === updatedMatch.category_id && m.match_type === 'BRACKET' && m.round_index === 1
+    );
 
-        // Reemplazar Winner
-        if (m.p1_name === winnerLabel) { matchUpdates.p1_name = winnerName; needsUpdate = true; }
-        if (m.p2_name === winnerLabel) { matchUpdates.p2_name = winnerName; needsUpdate = true; }
-        
-        // Reemplazar Loser
-        if (m.p1_name === loserLabel) { matchUpdates.p1_name = loserName; needsUpdate = true; }
-        if (m.p2_name === loserLabel) { matchUpdates.p2_name = loserName; needsUpdate = true; }
+    const zoneMatches = matchesList.filter(
+      m => m.category_id === updatedMatch.category_id && m.match_type === 'ZONE'
+    );
+    const numPairs = zoneMatches.length * 2;
+    const mapTemplate = BRACKET_MAPS[numPairs];
 
-        if (needsUpdate) {
-          // Chequeo de Auto-BYE
-          if (matchUpdates.p1_name && m.p2_name === 'BYE') matchUpdates.winner = matchUpdates.p1_name;
-          if (matchUpdates.p2_name && m.p1_name === 'BYE') matchUpdates.winner = matchUpdates.p2_name;
-          
-          updatesArray.push({ matchId: m.id, updates: matchUpdates });
+    const winnerCode = 'W' + zoneLetter;
+    const loserCode = 'L' + zoneLetter;
+
+    let wMatch = null, wSlot = null, wOtherSlot = null;
+    let lMatch = null, lSlot = null, lOtherSlot = null;
+
+    if (mapTemplate) {
+      const wIdx = mapTemplate.indexOf(winnerCode);
+      if (wIdx !== -1) {
+        const wMatchIndex = Math.floor(wIdx / 2);
+        wSlot = (wIdx % 2 === 0) ? 'p1_name' : 'p2_name';
+        wOtherSlot = (wIdx % 2 === 0) ? 'p2_name' : 'p1_name';
+        wMatch = round1Matches.find(m => m.match_index === wMatchIndex);
+      }
+
+      const lIdx = mapTemplate.indexOf(loserCode);
+      if (lIdx !== -1) {
+        const lMatchIndex = Math.floor(lIdx / 2);
+        lSlot = (lIdx % 2 === 0) ? 'p1_name' : 'p2_name';
+        lOtherSlot = (lIdx % 2 === 0) ? 'p2_name' : 'p1_name';
+        lMatch = round1Matches.find(m => m.match_index === lMatchIndex);
+      }
+    }
+
+    // Fallback de búsqueda si no se encontró en el template
+    if (!wMatch) {
+      for (const m of round1Matches) {
+        if (m.p1_name === winnerLabel || m.p1_name === p1 || m.p1_name === p2) {
+          wMatch = m; wSlot = 'p1_name'; wOtherSlot = 'p2_name'; break;
+        } else if (m.p2_name === winnerLabel || m.p2_name === p1 || m.p2_name === p2) {
+          wMatch = m; wSlot = 'p2_name'; wOtherSlot = 'p1_name'; break;
         }
       }
-    });
+    }
+
+    if (!lMatch) {
+      for (const m of round1Matches) {
+        if (m === wMatch) continue;
+        if (m.p1_name === loserLabel || m.p1_name === p1 || m.p1_name === p2) {
+          lMatch = m; lSlot = 'p1_name'; lOtherSlot = 'p2_name'; break;
+        } else if (m.p2_name === loserLabel || m.p2_name === p1 || m.p2_name === p2) {
+          lMatch = m; lSlot = 'p2_name'; lOtherSlot = 'p1_name'; break;
+        }
+      }
+    }
+
+    // Procesar partido de ganador
+    if (wMatch && wSlot) {
+      let matchUpdates = {};
+      let needsUpdate = false;
+
+      if (wMatch[wSlot] !== targetWinnerName) {
+        matchUpdates[wSlot] = targetWinnerName;
+        needsUpdate = true;
+      }
+
+      const rival = wMatch[wOtherSlot];
+      const isRivalBye = rival === 'BYE' || wMatch.is_bye;
+
+      if (isRivalBye) {
+        if (winner) {
+          if (wMatch.winner !== targetWinnerName) {
+            matchUpdates.winner = targetWinnerName;
+            matchUpdates.is_wo = true;
+            needsUpdate = true;
+          }
+        } else {
+          if (wMatch.winner !== null) {
+            matchUpdates.winner = null;
+            matchUpdates.is_wo = false;
+            matchUpdates.p1_score = ['', '', ''];
+            matchUpdates.p2_score = ['', '', ''];
+            needsUpdate = true;
+          }
+        }
+      } else {
+        if (wMatch[wSlot] !== targetWinnerName && wMatch.winner) {
+          matchUpdates.winner = null;
+          matchUpdates.is_wo = false;
+          matchUpdates.p1_score = ['', '', ''];
+          matchUpdates.p2_score = ['', '', ''];
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        updatesArray.push({ matchId: wMatch.id, updates: matchUpdates });
+      }
+    }
+
+    // Procesar partido de perdedor
+    if (lMatch && lSlot) {
+      let matchUpdates = {};
+      let needsUpdate = false;
+
+      if (lMatch[lSlot] !== targetLoserName) {
+        matchUpdates[lSlot] = targetLoserName;
+        needsUpdate = true;
+      }
+
+      const rival = lMatch[lOtherSlot];
+      const isRivalBye = rival === 'BYE' || lMatch.is_bye;
+
+      if (isRivalBye) {
+        if (loser) {
+          if (lMatch.winner !== targetLoserName) {
+            matchUpdates.winner = targetLoserName;
+            matchUpdates.is_wo = true;
+            needsUpdate = true;
+          }
+        } else {
+          if (lMatch.winner !== null) {
+            matchUpdates.winner = null;
+            matchUpdates.is_wo = false;
+            matchUpdates.p1_score = ['', '', ''];
+            matchUpdates.p2_score = ['', '', ''];
+            needsUpdate = true;
+          }
+        }
+      } else {
+        if (lMatch[lSlot] !== targetLoserName && lMatch.winner) {
+          matchUpdates.winner = null;
+          matchUpdates.is_wo = false;
+          matchUpdates.p1_score = ['', '', ''];
+          matchUpdates.p2_score = ['', '', ''];
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        updatesArray.push({ matchId: lMatch.id, updates: matchUpdates });
+      }
+    }
 
     return updatesArray;
   }
@@ -193,22 +318,62 @@ export function advanceWinner(matchesList, updatedMatch) {
     const nextMatchIndex = Math.floor(updatedMatch.match_index / 2);
     const isTop = updatedMatch.match_index % 2 === 0;
 
-    const nextMatch = matchesList.find(m => m.category_id === updatedMatch.category_id && m.match_type === 'BRACKET' && m.round_index === nextRoundIndex && m.match_index === nextMatchIndex);
+    const nextMatch = matchesList.find(
+      m => m.category_id === updatedMatch.category_id &&
+           m.match_type === 'BRACKET' &&
+           m.round_index === nextRoundIndex &&
+           m.match_index === nextMatchIndex
+    );
     
     if (!nextMatch) return []; // No hay siguiente partido (ej. Final)
 
+    const targetSlot = isTop ? 'p1_name' : 'p2_name';
+    const targetOtherSlot = isTop ? 'p2_name' : 'p1_name';
+
+    const rawWinner = updatedMatch.winner;
+    const incomingWinner = (rawWinner && rawWinner !== 'null' && rawWinner !== 'Sin definir') ? rawWinner : null;
+
     let matchUpdates = {};
-    if (isTop) {
-      matchUpdates.p1_name = updatedMatch.winner;
-    } else {
-      matchUpdates.p2_name = updatedMatch.winner;
+    let needsUpdate = false;
+
+    if (nextMatch[targetSlot] !== incomingWinner) {
+      matchUpdates[targetSlot] = incomingWinner;
+      needsUpdate = true;
     }
 
-    // Auto-BYE
-    if (matchUpdates.p1_name && nextMatch.p2_name === 'BYE') matchUpdates.winner = matchUpdates.p1_name;
-    if (matchUpdates.p2_name && nextMatch.p1_name === 'BYE') matchUpdates.winner = matchUpdates.p2_name;
+    const rival = nextMatch[targetOtherSlot];
+    const isRivalBye = rival === 'BYE' || nextMatch.is_bye;
 
-    return [{ matchId: nextMatch.id, updates: matchUpdates }];
+    if (isRivalBye) {
+      if (incomingWinner) {
+        if (nextMatch.winner !== incomingWinner) {
+          matchUpdates.winner = incomingWinner;
+          matchUpdates.is_wo = true;
+          needsUpdate = true;
+        }
+      } else {
+        if (nextMatch.winner !== null) {
+          matchUpdates.winner = null;
+          matchUpdates.is_wo = false;
+          matchUpdates.p1_score = ['', '', ''];
+          matchUpdates.p2_score = ['', '', ''];
+          needsUpdate = true;
+        }
+      }
+    } else {
+      if (nextMatch[targetSlot] !== incomingWinner && nextMatch.winner) {
+        matchUpdates.winner = null;
+        matchUpdates.is_wo = false;
+        matchUpdates.p1_score = ['', '', ''];
+        matchUpdates.p2_score = ['', '', ''];
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      return [{ matchId: nextMatch.id, updates: matchUpdates }];
+    }
+    return [];
   }
 
   return [];
